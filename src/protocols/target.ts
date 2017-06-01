@@ -7,6 +7,8 @@ import { EventEmitter } from 'events';
 import { Logger } from '../logger';
 import { ITarget } from '../adapters/adapterInterfaces';
 
+type FilterCallback = (msg: any, requestParams?: any) => Promise<any>;
+
 export class Target extends EventEmitter {
     private _data: ITarget;
     private _url: string;
@@ -14,8 +16,9 @@ export class Target extends EventEmitter {
     private _wsTools: WebSocket;
     private _isConnected: boolean;
     private _messageBuffer: string[];
-    private _messageFilters: Map<string, ((msg: any) => Promise<any>)[]>;
+    private _messageFilters: Map<string, (FilterCallback)[]>;
     private _toolRequestMap: Map<number, string>;
+    private _toolRequestRawMessageMap: Map<number, string>;
     private _adapterRequestMap: Map<number, { resolve: (any) => void, reject: (any) => void }>;
     private _requestId: number;
     private _id: string;
@@ -24,8 +27,9 @@ export class Target extends EventEmitter {
         super();
         this._data = data;
         this._messageBuffer = [];
-        this._messageFilters = new Map<string, ((msg: any) => Promise<any>)[]>();
+        this._messageFilters = new Map<string, (FilterCallback)[]>();
         this._toolRequestMap = new Map<number, string>();
+		this._toolRequestRawMessageMap = new Map<number, string>();
         this._adapterRequestMap = new Map<number, { resolve: (any) => void, reject: (any) => void }>();
         this._requestId = 0;
 
@@ -84,7 +88,7 @@ export class Target extends EventEmitter {
         this.connectTo(this._url, wsFrom);
     }
 
-    public addMessageFilter(method: string, filter: (msg: any) => Promise<any>): void {
+    public addMessageFilter(method: string, filter: FilterCallback): void {
         if (!this._messageFilters.has(method)) {
             this._messageFilters.set(method, []);
         }
@@ -139,6 +143,7 @@ export class Target extends EventEmitter {
         const eventName = `tools::${msg.method}`;
 
         this._toolRequestMap.set(msg.id, msg.method);
+		this._toolRequestRawMessageMap.set(msg.id, rawMessage);
         this.emit(eventName, msg.params);
 
         if (this._messageFilters.has(eventName)) {
@@ -167,12 +172,25 @@ export class Target extends EventEmitter {
         const msg = JSON.parse(rawMessage);
 
         if ('id' in msg) {
+
+			let requestRawMessage: string;
+			if(this._toolRequestRawMessageMap.has(msg.id)) {
+				requestRawMessage = this._toolRequestRawMessageMap.get(msg.id);
+				this._toolRequestRawMessageMap.delete(msg.id);
+			}
+			console.log('onMessageFromTarget_requestRawMessage(' + msg.id + '): ' + requestRawMessage);
+
+
             if (this._toolRequestMap.has(msg.id)) {
                 // Reply to tool request
                 let eventName = `target::${this._toolRequestMap.get(msg.id)}`;
                 this.emit(eventName, msg.params);
 
                 this._toolRequestMap.delete(msg.id);
+
+				
+
+				//Logger.log('onMessageFromTarget_toolRequestMap :' + rawMessage);
 
                 if ('error' in msg && this._messageFilters.has('target::error')) {
                     eventName = 'target::error';
@@ -183,10 +201,10 @@ export class Target extends EventEmitter {
 
                     this._messageFilters.get(eventName).forEach((filter) => {
                         sequence = sequence.then((filteredMessage) => {
-                            return filter(filteredMessage);
+                            return filter(filteredMessage, requestRawMessage);
                         });
                     });
-
+ 
                     sequence.then((filteredMessage) => {
                         rawMessage = JSON.stringify(filteredMessage);
                         this.sendToTools(rawMessage);
@@ -200,7 +218,7 @@ export class Target extends EventEmitter {
                 const resultPromise = this._adapterRequestMap.get(msg.id);
                 this._adapterRequestMap.delete(msg.id);
 
-                Logger.log(rawMessage);
+                Logger.log('onMessageFromTarget_adapterRequestMap :' + rawMessage);
 
                 if ('result' in msg) {
                     resultPromise.resolve(msg.result);
@@ -237,7 +255,7 @@ export class Target extends EventEmitter {
     }
 
     private sendToTools(rawMessage: string): void {
-        Logger.log(rawMessage);
+        Logger.log('sendToTools: ' + rawMessage);
         // Make sure the tools socket can receive messages
         if (this.isSocketConnected(this._wsTools)) {
             this._wsTools.send(rawMessage);
@@ -245,7 +263,7 @@ export class Target extends EventEmitter {
     }
 
     private sendToTarget(rawMessage: string): void {
-        Logger.log(rawMessage);
+        Logger.log('sendToTarget: ' + rawMessage);
 
         // Make sure the target socket can receive messages
         if (this.isSocketConnected(this._wsTarget)) {

@@ -89,7 +89,140 @@ export abstract class IOSProtocol extends ProtocolAdapter {
         this._target.addMessageFilter('target::Runtime.evaluate', (msg) => this.onEvaluate(msg));
 
         this._target.addMessageFilter('target::Inspector.inspect', (msg) => this.onInspect(msg));
+
+
+        this._target.addMessageFilter('target::Console.messageAdded', (msg) => this.onMessageAdded(msg));
+        this._target.addMessageFilter('target::Runtime.getProperties', (msg, requestRawMessage) => this.onGetProperties(msg, requestRawMessage));
     }
+
+	private onMessageAdded(msg: any): Promise<any> {
+
+		// https://chromedevtools.github.io/debugger-protocol-viewer/tot/Runtime/#type-RemoteObjectId
+
+		Logger.log(`onMessageAdded!!!!!!!!!!!!!!!!!!!!`);
+
+		
+		
+		let message = msg.params.message;
+
+		let type;
+		if(message.type === "log") {
+			switch(message.level) {
+				case "log": type = "log"; break;
+				case "info": type = "info"; break;
+				case "error": type = "error"; break;
+				default: type = "log";
+			}
+		} else {
+			type = message.type;
+		}
+
+		let newParams = {
+			type: type,
+			executionContextId: 0,
+			timestamp: new Date().getTime(),
+			args: message.parameters || []
+		}
+		this._target.fireEventToTools('Runtime.consoleAPICalled', newParams);
+
+
+		return Promise.resolve(null);
+
+		/*
+		let params = {
+			type: "log",
+			executionContextId: 14,
+			timestamp: new Date().getTime(),
+			args: [
+				{
+					"type": "object",
+					"objectId": "{\"injectedScriptId\":1,\"id\":161}",
+					value: "{\"name\":\"val\",\"type\":\"number\",\"value\":\"123\"}",
+					"className": "Object",
+					"description": "Object",
+					"preview": {
+						"type": "object",
+						"description": "Object",
+						overflow: false,
+						"properties": [{
+							"name": "val",
+							"type": "number",
+							"value": "123"
+						}, {
+							"name": "name",
+							"type": "string",
+							"value": "apple"
+						}]
+					}
+				}
+			]
+		};
+
+		//this._target.fireEventToTools('Runtime.consoleAPICalled', params);
+
+        msg.method = 'Runtime.consoleAPICalled';
+        msg.params = params;*/
+		
+
+		//msg.method = "Log.entryAdded";
+
+		
+		/*
+		let params = {
+			entry: {
+				source: "javascript",
+				level: "info",
+				text: "yo",
+				timestamp: new Date().getTime()
+			}
+		}
+		this._target.fireEventToTools('Log.entryAdded', params);*/
+
+		//return Promise.resolve(msg);
+	}
+
+	private onGetProperties(msg: any, requestRawMessage?: string): Promise<any> {
+
+		Logger.log('onGetProperties msg.result.result.length: ' +  msg.result.result.length);
+		Logger.log('onGetProperties msg.result.result: ' +  JSON.stringify(msg.result.result));
+		//Logger.log('requestRawMessage: ' + requestRawMessage);
+		
+		/*if(requestRawMessage) {
+			let requestObj = JSON.parse(requestRawMessage);
+			if(requestObj.params && requestObj.params.ownProperties === false) {
+				Logger.log('onGetProperties params.ownProperties === false');
+				//return Promise.resolve(null);
+
+
+				for(var i = 0; i < msg.result.result.length; i++) {
+					//if(!msg.result.result[i].isOwn) {
+					//	msg.result.result[i].isOwn = false
+					//}
+					if(msg.result.result[i].name === "__proto__") {
+
+					}
+				}
+			}
+		}*/
+
+
+		var newPropertyDescriptors = [];
+
+		for(var i = 0; i < msg.result.result.length; i++) {
+			if(msg.result.result[i].isOwn || msg.result.result[i].nativeGetter) {
+				msg.result.result[i].isOwn = true;
+				newPropertyDescriptors.push(msg.result.result[i]);
+			}
+		}
+		msg.result.result = null;
+		msg.result.result = newPropertyDescriptors;
+
+		return Promise.resolve(msg);
+	}
+
+
+
+
 
     private onDomGetDocument(): void {
         // Rundown the stylesheets when the page navigates
@@ -257,6 +390,16 @@ export abstract class IOSProtocol extends ProtocolAdapter {
     }
 
     private onEvaluate(msg: any): Promise<any> {
+
+
+		/*Logger.log(`
+		=============================
+		target::Runtime.evaluate
+		=============================
+		
+		`);*/
+
+
         if (msg.result.wasThrown) {
             msg.result.result.subtype = 'error';
             msg.result.exceptionDetails = {
@@ -278,6 +421,20 @@ export abstract class IOSProtocol extends ProtocolAdapter {
         } else if (msg.result && msg.result.result && msg.result.result.preview) {
             msg.result.result.preview.description = msg.result.result.description;
             msg.result.result.preview.type = 'object';
+
+			//msg.result.result.preview.overflow = false;
+			//msg.result.result.preview.value = '[1, 2, 3]';
+			//msg.result.result.preview.value = JSON.stringify({ val: 123, test: 'testing' });
+
+			/*let properties = msg.result.result.preview.properties;
+			for(var i = 0; i < properties.length; i++) {
+				let prop = properties[i];
+				if(prop.type === "object") {
+					if(!prop.subtype) { // Object
+						prop
+					}
+				}
+			}*/
         }
 
         return Promise.resolve(msg);
