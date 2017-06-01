@@ -4,6 +4,19 @@
 
 RemoteDebug iOS WebKit Adapter is an protocol adapter that enables tools compatible with the [RemoteDebug Inspector Core Protocol Specification](https://github.com/RemoteDebug/inspector-core-spec) to work with Safari Mobile / WebKit WebView winstances running in iOS devices. 
 
+
+## Screenshots
+
+| 														| 													| 
+| ----------------------------------------------------- | ------------------------------------------------- |
+| Evaluate expressions									| Comletions										| 
+| ![](.readme/chrome_support_evaluate_expressions.png)  | ![](.readme/chrome_support_completions.png) 		|
+| Console.log											| Get properties from the object					| 
+| ![](.readme/chrome_support_console_log.png) 			| ![](.readme/chrome_support_get_properties_1.png) 	|
+| Get properties from the object						| 													| 
+| ![](.readme/chrome_support_get_properties_2.png) 		|													|
+
+
 ## Getting Started
 
 ### 1) Install dependencies
@@ -105,6 +118,9 @@ You can have your iOS targets show up in Mozila debugger.html, by starting `remo
 | Network.getCookies                         |
 | Network.deleteCookie                       |
 | Network.setMonitoringXHREnabled            |
+|                                            |
+| Console.messageAdded			             |
+| Runtime.getProperties			             |
 
 ## How to contribute
 
